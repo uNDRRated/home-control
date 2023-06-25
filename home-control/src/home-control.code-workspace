@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"name": "home-control",
+			"path": "C:/Users/troni/Documents/PlatformIO/Projects/home-control"
+		},
+		{
+			"name": "home-control",
+			"path": ".."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"string": "cpp"
+		}
+	}
+}
