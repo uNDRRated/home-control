@@ -5,24 +5,45 @@ CRGB leds_room[NUM_ROOM];
 const char* ssid = "cablelink_0823061";
 const char* password = "kkYo57icS5(65ZYU";
 
+//DHT Sensor
+DHT dht(DHT_PORT, DHT_TYPE);
+unsigned long previousMillis = 0;
+const unsigned long interval = 5000;  // Interval between readings in milliseconds
+
+
 //Set webserver to port 80
-ESP8266WebServer server(80);
+AsyncWebServer server(80);
 
 String header;
-
 String outputRoomState = "off";
-
-void handleRoot();
-void handleRoomOn();
-void handleRoomOff();
-void handleNotFound();
+CRGB g_LEDColor = CRGB::BlueViolet;
 
 int room = 0;
+
+String processor(const String& var){
+  //Serial.println(var);
+  if(var == "TEMPERATUREC"){
+    return "test";
+  }
+  else if(var == "TEMPERATUREF"){
+    return "test";
+  }
+  return String();
+}
+
+//Prototypes
+void turnRoomOn();
+void turnRoomOff();
+void updateLEDColors(String hexCode);
 
 //ROOM_PORT: 4
 void setup() {
   system_update_cpu_freq(SYS_CPU_160MHZ);
-  Serial.begin(57600);
+  Serial.begin(9600);
+
+  //Add temperature sensor
+  dht.begin();
+
   FastLED.addLeds<LED_TYPE, ROOM_PORT, COLOR_ORDER>(leds_room, NUM_ROOM).setCorrection(TypicalLEDStrip);
   FastLED.setBrightness(BRIGHTNESS);
 
@@ -37,63 +58,87 @@ void setup() {
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
   
-  server.on("/", handleRoot);
-  server.on("/roomOn", HTTP_POST, handleRoomOn);
-  server.on("/roomOff", HTTP_POST, handleRoomOff);
+  server.on("/", HTTP_GET, [](AsyncWebServerRequest *request) {
+    request->send_P(200, "text/html", index_html, processor);
+  });
 
-  server.onNotFound(handleNotFound);
-  
+  server.on("/roomOn", HTTP_GET, [](AsyncWebServerRequest *request) {
+    turnRoomOn();
+    Serial.println("Turning Room On");
+    //request->send_P(200, "text/plain", "Room On", processor);
+  });
+
+  server.on("/roomOff", HTTP_GET, [](AsyncWebServerRequest *request) {
+    turnRoomOff();
+    Serial.println("Turning Room Off");
+    //request->send_P(200, "text/plain", "Room On", processor);
+  });
+
+  server.on("/setColor", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (request->hasParam("color")) {
+      String hexCode = request->getParam("color")->value();
+      Serial.println("Setting Color: " + hexCode);
+      updateLEDColors(hexCode);
+    }
+  });
+
   server.begin();
 }
 
 void loop() {
-  server.handleClient();
+  unsigned long currentMillis = millis();
 
-  if(room == 0) {
+  if (currentMillis - previousMillis >= interval) {
+    previousMillis = currentMillis;
 
+    float h = dht.readHumidity();
+    // Read temperature as Celsius (the default)
+    float t = dht.readTemperature() - 5;
+
+    Serial.print("Humidity: ");
+    Serial.print(h);
+    Serial.print(" %\n");
+    Serial.print("Temperature: ");
+    Serial.print(t);
+    Serial.print("\n\n");
+
+    if (isnan(t) || isnan(h)) {
+      Serial.println("Failed to read from DHT sensor!");
+      return;
+    }
   }
 
-  if(room == 1) {
+}
 
+void updateLEDColors(String hexCode) {
+  if(leds_room[1] != CRGB::Black) {
+    Serial.println("LEDS are ON chaning color to " + hexCode);
+    uint32_t colorValue = (uint32_t) strtol(&hexCode[1], NULL, 16);  // Convert hex string to 32-bit integer
+    CRGB color = CRGB((colorValue >> 16) & 0xFF, (colorValue >> 8) & 0xFF, colorValue & 0xFF);  // Extract RGB components
+    g_LEDColor = color;
+
+    Serial.println("LEDS START");
+    for(int i = 0; i < NUM_ROOM; i++) {
+      leds_room[i] = color;
+      FastLED.show();
+    }
+    
+    Serial.println("LEDS END");
   }
 }
 
-void handleRoot() {
-  server.send(200, "text/html", "<style>body {background: black}</style>blue<form action=\"/roomOn\" method=\"POST\"><input type=\"submit\" value=\"Room On\"></form> <form action=\"/roomOff\" method=\"POST\"><input type=\"submit\" value=\"Room Off\"></form>");
-}
-
-void showLED() {
-  
-}
-
-void turnOffLED() {
-
-}
-
-void handleRoomOn() {
+void turnRoomOn() {
   for(int i = 0; i < NUM_ROOM; i++) {
-    leds_room[i] = CRGB::DarkBlue;
+    leds_room[i] = g_LEDColor;
     delay(10);
     FastLED.show();
-    yield();
   }
-
-  server.sendHeader("Location", "/");
-  server.send(303);
 }
 
-void handleRoomOff() {
+void turnRoomOff() {
   for(int i = 0; i < NUM_ROOM; i++) {
     leds_room[i] = CRGB::Black;
     delay(10);
     FastLED.show();
-    yield();
   }
-
-  server.sendHeader("Location", "/");
-  server.send(303);
-}
-
-void handleNotFound() {
-
 }
